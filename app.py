@@ -31,9 +31,7 @@ df['parsed_ingredients'] = df['parsed_ingredients'].apply(
 print(f"Model loaded successfully!")
 print(f"Dataset loaded: {len(df)} products")
 
-# -----------------------------
 #  Definisikan fungsi bantu
-# -----------------------------
 def find_closest_product_name(name, df, cutoff=0.3):
     """Cari nama produk paling mirip dari dataset (fuzzy matching)."""
     all_names = df["product_name"].tolist()
@@ -138,7 +136,7 @@ def calculate_compatibility(ing1, ing2):
     return pred, float(prob), shared
 
 def get_recommendations(product_name, df, model, top_n=5):
-    """Dapatkan rekomendasi produk yang kompatibel dengan produk input."""
+    """Dapatkan rekomendasi produk yang kompatibel dengan produk input (OPTIMIZED)."""
     # Cari produk yang dimaksud
     matches = find_closest_product_name(product_name, df)
     if not matches:
@@ -148,26 +146,48 @@ def get_recommendations(product_name, df, model, top_n=5):
     target_product = df[df["product_name"] == target_name].iloc[0]
     target_ingredients = target_product["parsed_ingredients"]
     
-    recommendations = []
+    # OPTIMASI: Vectorize semua ingredients sekali saja
+    vectorizer = CountVectorizer()
     
-    # Loop semua produk lain
-    for idx, row in df.iterrows():
-        other_name = row["product_name"]
-        
-        # Skip produk yang sama
-        if other_name == target_name:
-            continue
-        
-        other_ingredients = row["parsed_ingredients"]
-        
-        # Hitung compatibility
-        pred, confidence, shared_count = calculate_compatibility(target_ingredients, other_ingredients)
-        
-        # Hanya tambahkan jika compatible (pred == 1)
-        if pred == 1:
+    # Join ingredients untuk target product
+    target_text = " ".join(target_ingredients)
+    
+    # Prepare batch data untuk semua produk lain
+    other_products = df[df["product_name"] != target_name].copy()
+    other_texts = other_products["parsed_ingredients"].apply(lambda x: " ".join(x))
+    
+    # Vectorize target + all others dalam 1x operasi
+    all_texts = [target_text] + other_texts.tolist()
+    vectors = vectorizer.fit_transform(all_texts)
+    
+    # Hitung cosine similarity untuk semua produk sekaligus
+    target_vector = vectors[0]
+    other_vectors = vectors[1:]
+    similarities = cosine_similarity(target_vector, other_vectors).flatten()
+    
+    # BATCH PREDICTION: Predict semua sekaligus (jauh lebih cepat!)
+    # Gabungkan features untuk batch prediction
+    tf_features_1 = target_vector.toarray().repeat(len(other_products), axis=0)
+    tf_features_2 = other_vectors.toarray()
+    
+    # Gabungkan features
+    features_batch = np.hstack([tf_features_1, tf_features_2, similarities.reshape(-1, 1)])
+    
+    # Predict batch (1x prediction untuk semua produk!)
+    predictions = model.predict(features_batch)
+    probabilities = model.predict_proba(features_batch)[:, 1]
+    
+    # Filter hanya yang compatible dan buat list rekomendasi
+    recommendations = []
+    for idx, (pred, prob) in enumerate(zip(predictions, probabilities)):
+        if pred == 1:  # Compatible
+            other_name = other_products.iloc[idx]["product_name"]
+            other_ingredients = other_products.iloc[idx]["parsed_ingredients"]
+            shared_count = len(set(target_ingredients) & set(other_ingredients))
+            
             recommendations.append({
                 "product_name": other_name,
-                "confidence": round(confidence, 2),
+                "confidence": round(float(prob), 2),
                 "shared_ingredients_count": shared_count
             })
     
@@ -261,7 +281,7 @@ def predict():
         "tips": tips
     }
     
-    # 🆕 Jika TIDAK COCOK, kasih rekomendasi alternatif
+    # Jika TIDAK COCOK, kasih rekomendasi alternatif
     if pred == 0:
         # Dapatkan rekomendasi untuk masing-masing produk (top 3)
         _, recommendations_for_product1 = get_recommendations(name1, df, model, top_n=3)
