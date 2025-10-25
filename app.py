@@ -249,7 +249,7 @@ def predict():
 
     result = "Cocok digunakan bersama" if pred == 1 else "Tidak disarankan dipakai bersama"
 
-    return jsonify({
+    response_data = {
         "status": "ok",
         "product1": name1,
         "product2": name2,
@@ -259,7 +259,27 @@ def predict():
         "shared_ingredients": shared_ingredients[:5] if len(shared_ingredients) > 5 else shared_ingredients,
         "explanation": explanation,
         "tips": tips
-    })
+    }
+    
+    # 🆕 Jika TIDAK COCOK, kasih rekomendasi alternatif
+    if pred == 0:
+        # Dapatkan rekomendasi untuk masing-masing produk (top 3)
+        _, recommendations_for_product1 = get_recommendations(name1, df, model, top_n=3)
+        _, recommendations_for_product2 = get_recommendations(name2, df, model, top_n=3)
+        
+        response_data["alternative_recommendations"] = {
+            "note": "Karena kedua produk tidak cocok digunakan bersamaan, berikut adalah rekomendasi produk alternatif yang bisa digunakan:",
+            "replace_product1": {
+                "info": f"Ganti '{name1}' dengan salah satu produk berikut yang cocok dengan '{name2}':",
+                "recommendations": recommendations_for_product1
+            },
+            "replace_product2": {
+                "info": f"Atau ganti '{name2}' dengan salah satu produk berikut yang cocok dengan '{name1}':",
+                "recommendations": recommendations_for_product2
+            }
+        }
+    
+    return jsonify(response_data)
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
