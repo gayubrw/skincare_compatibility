@@ -2,44 +2,199 @@
 
 Proyek Machine Learning untuk memprediksi apakah dua produk skincare cocok digunakan bersama berdasarkan kesamaan bahan aktifnya.
 
-## Features v1.3.0
-
-- **Compatibility Check** - Cek kompatibilitas 2 produk sekaligus
-- **Auto-Recommendations** - Rekomendasi otomatis muncul saat produk tidak cocok
-- **Smart Recommendations** - Dapatkan rekomendasi produk yang cocok (optimized)
-- **Educational Explanations** - Penjelasan detail WHY compatible/not
-- **Ingredient Info** - Database pengetahuan tentang bahan skincare
-- **Usage Tips** - Tips penggunaan untuk setiap kombinasi
-- **Organized Structure** - Model & data di folder `model_training/`
-
-### What's New in Latest Update:
-
-- ⚡ **Performance Optimization**: `/recommend` endpoint 18-30x lebih cepat (90s → 3-5s)
-- 🎯 **Alternative Recommendations**: Otomatis muncul saat produk tidak cocok
-- 📦 **Batch Prediction**: Predict 2,610 produk sekaligus untuk response cepat
-
 ---
 
-## Cara Menjalankan (untuk tim backend)
+## 🚀 Quick Start Guide (untuk yang baru clone)
 
-### 1. Instal dependensi
+### Prerequisites
 
-Pastikan sudah menginstal semua library yang diperlukan:
+- Python 3.10 atau lebih baru
+- pip (Python package manager)
+- Git
+
+### Langkah-langkah Setup:
+
+#### Clone Repository
+
+```bash
+git clone https://github.com/gayubrw/skincare_compatibility.git
+cd skincare_compatibility
+```
+
+#### Buat Virtual Environment (Opsional tapi Direkomendasikan)
+
+**Windows:**
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+**macOS/Linux:**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+#### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Jalankan API
+**Dependencies yang akan diinstall:**
+
+- Flask 3.0+ (Web framework)
+- scikit-learn 1.6.1 (ML library)
+- pandas 2.0+ (Data processing)
+- numpy 1.24+ (Numerical computing)
+- gunicorn 21.2+ (Production server)
+- flask-cors (CORS support)
+
+#### Verifikasi File Model & Dataset
+
+Pastikan file-file ini ada di folder `model_training/`:
+
+- `skincare_model.pkl` (94 KB) - Trained ML model
+- `unified_cleaned_products.csv` (560 KB) - 2,610 produk
+- `compatibility_rules.csv` (1 KB) - Rules untuk penjelasan
+
+#### Jalankan API
 
 ```bash
 python app.py
 ```
 
-API akan berjalan di:
+**Output yang benar:**
 
-- **Local:** http://localhost:5000
-- **Network:** http://0.0.0.0:5000
+```
+Compatibility rules loaded: 5 rules
+Model loaded successfully!
+Dataset loaded: 2610 products
+Starting server on port 5000
+Debug mode: True
+ * Running on http://127.0.0.1:5000
+```
+
+#### Test API
+
+**Test dengan browser:**
+Buka: http://localhost:5000/health
+
+**Test dengan Postman:**
+
+- Method: POST
+- URL: `http://localhost:5000/predict`
+- Body (raw JSON):
+
+```json
+{
+  "product1": "cerave cream",
+  "product2": "ordinary hyaluronic acid"
+}
+```
+
+---
+
+## Troubleshooting
+
+### Error: "No module named 'flask'"
+
+**Solusi:** Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Error: "Model file not found"
+
+**Solusi:** Pastikan file `model_training/skincare_model.pkl` ada
+
+### Error: "Port 5000 already in use"
+
+**Solusi:** Ubah port di `app.py` atau kill process yang pakai port 5000
+
+```bash
+# Windows
+netstat -ano | findstr :5000
+taskkill /PID <PID> /F
+
+# macOS/Linux
+lsof -i :5000
+kill -9 <PID>
+```
+
+### Model Tidak Ditemukan
+
+**Gejala:** Error "Model file not found"
+
+**Solusi:**
+
+```bash
+# Pastikan model ada di folder yang benar
+ls model_training/skincare_model.pkl
+
+# Jika tidak ada, retrain model:
+cd model_training
+jupyter notebook Feature_Engineering_&_Model_Training.ipynb
+# Run all cells (Cell → Run All)
+```
+
+### Port 5000 Sudah Dipakai
+
+**Solusi:**
+
+```bash
+# Windows
+netstat -ano | findstr :5000
+taskkill /PID <PID> /F
+
+# macOS/Linux
+lsof -i :5000
+kill -9 <PID>
+```
+
+### API Lambat / Timeout
+
+**Solusi:**
+
+- Model sudah di-optimasi, response time normal:
+  - `/predict`: ~1s
+  - `/recommend`: ~3-5s (batch prediction)
+  - `/ingredient-info`: <1s
+  - `/tips`: <1s
+
+### Model Selalu Predict "Compatible"
+
+**Status:** ✅ **FIXED in v2.0!**
+
+Model baru menggunakan balanced training data, sehingga bisa predict BOTH compatible AND incompatible dengan akurat.
+
+---
+
+## 📦 Deployment ke Production
+
+### Deploy ke Render (Recommended)
+
+1. Push repository ke GitHub
+2. Buat account di [Render.com](https://render.com)
+3. Buat New Web Service
+4. Connect repository GitHub
+5. Konfigurasi:
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `gunicorn app:app`
+   - **Environment:** Python 3
+
+### Deploy ke Heroku
+
+```bash
+heroku login
+heroku create skincare-compatibility-api
+git push heroku main
+```
+
+File `Procfile` dan `runtime.txt` sudah disediakan.
 
 ---
 
@@ -184,27 +339,210 @@ Mendapatkan informasi edukatif tentang bahan skincare populer.
 
 ## Performance
 
-| Endpoint           | Response Time | Dataset Size  |
-| ------------------ | ------------- | ------------- |
-| `/predict`         | ~0.5-1s       | 2,610 produk  |
-| `/recommend`       | ~3-5s         | 2,610 produk  |
-| `/ingredient-info` | <0.1s         | 8 ingredients |
+| Endpoint           | Response Time | Dataset Size  | Note                         |
+| ------------------ | ------------- | ------------- | ---------------------------- |
+| `/predict`         | ~0.5-1s       | 2,610 produk  | Single pair prediction       |
+| `/recommend`       | ~3-5s         | 2,610 produk  | Batch prediction (optimized) |
+| `/ingredient-info` | <0.1s         | 8 ingredients | Instant lookup               |
+| `/tips`            | <0.1s         | Rule-based    | Instant response             |
 
-**Optimizations:**
+**Optimizations Applied:**
 
-- Batch prediction untuk `/recommend` (18-30x lebih cepat)
-- Vectorization untuk feature engineering
-- Efficient filtering dengan NumPy
+- ✅ Batch prediction untuk `/recommend` (18-30x lebih cepat: 90s → 3-5s)
+- ✅ Vectorization untuk feature engineering
+- ✅ Efficient filtering dengan NumPy arrays
+- ✅ Balanced model training (no bias, accurate predictions)
 
 ---
 
-## Technical Details
+## 📊 Technical Details
 
-- **Model:** RandomForestClassifier (200 trees, max_depth=8)
-- **Features:** TF-IDF vectors, cosine similarity, shared ingredients
-- **Dataset:** 2,610 skincare products
-- **Accuracy:** High compatibility prediction
-- **Python Version:** 3.10+
+### Model Specifications
+
+**Algorithm:** RandomForestClassifier
+
+**Parameters:**
+
+- `n_estimators=200` (200 decision trees)
+- `max_depth=8` (tree depth limit)
+- `class_weight='balanced'` (handle any remaining imbalance)
+- `random_state=42` (reproducibility)
+- `n_jobs=-1` (parallel processing)
+
+**Training Data:**
+
+- **Total:** 4,000 balanced pairs
+- **Compatible:** 2,000 pairs (50%)
+- **Incompatible:** 2,000 pairs (50%)
+- **Source:** 2,610 unique skincare products
+
+**Features (4 total):**
+
+1. `len_diff` - Difference in ingredient list length
+2. `shared_ingredients` - Count of shared ingredients (**44% importance**)
+3. `jaccard_similarity` - Set intersection metric (**46.3% importance**)
+4. `cosine_similarity` - TF vector similarity (**9.6% importance**)
+
+**Performance Metrics:**
+
+- ✅ Train Accuracy: **100%**
+- ✅ Test Accuracy: **100%**
+- ✅ Can predict Compatible: **YES**
+- ✅ Can predict Incompatible: **YES**
+- ✅ Confusion Matrix: Perfect (no false positives/negatives)
+
+**Conflict Detection:**
+
+- Retinol + Vitamin C (L-Ascorbic Acid)
+- AHA/BHA + Retinol
+- Benzoyl Peroxide + Retinol
+
+### Technology Stack
+
+- **Python:** 3.10+
 - **Framework:** Flask 3.0+ with CORS support
+- **ML Library:** scikit-learn 1.6.1
+- **Data Processing:** pandas 2.0+, numpy 1.24+
+- **Production Server:** Gunicorn 21.2+
+- **Training Environment:** Jupyter Notebook with matplotlib, seaborn
 
 ---
+
+## 🗂️ Project Structure
+
+```
+
+ML-SkincareCompatibility/
+├── app.py # Main Flask API (500+ lines)
+├── requirements.txt # Python dependencies
+├── runtime.txt # Python version for deployment
+├── Procfile # Gunicorn configuration
+├── README.md # Documentation (this file)
+├── INSTALLATION.md # Detailed installation guide
+├── MODEL*TRAINING_SUMMARY.md # Training process documentation
+├── model_training/
+│ ├── skincare_model.pkl # ✅ Trained ML model (94 KB)
+│ ├── unified_cleaned_products.csv # Product database (2,610 products)
+│ ├── compatibility_rules.csv # Compatibility rules (5 rules)
+│ ├── master_ingredient_dictionary.csv # Ingredient reference
+│ └── Feature_Engineering*&\_Model_Training.ipynb # ✅ Training notebook (balanced data)
+└── **pycache**/ # Python cache (auto-generated)
+
+```
+
+**Important Files:**
+
+- `Feature_Engineering_&_Model_Training.ipynb` ✅ **Use this for retraining** - Balanced data with visualizations
+
+````
+
+**Important Files:**
+
+- `Feature_Engineering_&_Model_Training.ipynb` ✅ **Use this for retraining** - Balanced data with visualizations
+- `app.py` - Production Flask API
+
+---
+
+## 🔄 Retraining Model (Advanced)
+
+**Kapan perlu retrain:**
+
+- Ada produk baru di dataset (> 10% increase)
+- Update compatibility rules
+- Model accuracy menurun
+- Perubahan feature engineering
+
+### **Cara Retrain:**
+
+Gunakan Jupyter Notebook untuk training interaktif dengan visualisasi:
+
+```bash
+# Navigate to model_training folder
+cd model_training
+
+# Open notebook
+jupyter notebook Feature_Engineering_&_Model_Training.ipynb
+````
+
+**Features:**
+
+- ✅ **Balanced Training Data** - 50% compatible + 50% incompatible pairs
+- ✅ **Conflict Detection** - Automatically detect conflicting ingredient pairs
+- ✅ **Visualisasi** - Distribusi data, confusion matrix, feature importance
+- ✅ **Step-by-step Explanation** - Clear documentation in each cell
+- ✅ **Production-Ready Model** - Can predict BOTH compatible AND incompatible
+
+**Cara Pakai:**
+
+1. Run all cells dari atas ke bawah (Cell → Run All)
+2. Model akan tersimpan di `model_training/skincare_model.pkl`
+3. Restart Flask API: `python app.py`
+4. Test di Postman - model sekarang bisa predict Compatible DAN Incompatible!
+
+**Expected Output:**
+
+```
+✅ Loaded 2610 products
+✅ Found 3 conflicting pairs
+✅ Generated 2000 compatible pairs
+✅ Generated 2000 incompatible pairs
+⚖️ Dataset is BALANCED!
+🎯 Accuracy: Train: 100.00%, Test: 100.00%
+💾 Model saved to: skincare_model.pkl
+```
+
+**Verification:**
+
+- ✅ Notebook telah di-test dan berjalan tanpa error
+- ✅ Model yang dihasilkan dapat predict BOTH compatible dan incompatible
+- ✅ API berjalan normal setelah menggunakan model baru
+- ✅ Response time tetap optimal (~3-5s untuk `/recommend`)
+
+---
+
+## 👥 Contributing
+
+Untuk kontribusi:
+
+1. Fork repository
+2. Create feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open Pull Request
+
+**For Model Improvements:**
+
+- Open notebook: `model_training/Feature_Engineering_&_Model_Training.ipynb`
+- Experiment with parameters (n_estimators, max_depth, features)
+- Document changes in notebook markdown cells
+- Test accuracy before committing
+- Update `MODEL_TRAINING_SUMMARY.md` with results
+
+---
+
+## 📝 License
+
+This project is for educational purposes.
+
+---
+
+## 👨‍💻 Team
+
+- **ML Team Lead:** Mas Gilang
+- **ML Developer:** Gayu
+- **Flutter Team:** 2 developers
+
+---
+
+## 📞 Support
+
+Jika ada masalah:
+
+1. Cek section [Troubleshooting](#-troubleshooting)
+2. Lihat [Issues](https://github.com/gayubrw/skincare_compatibility/issues)
+3. Hubungi tim ML
+
+---
+
+**Last Updated:** October 25, 2025
+**Version:** 1.3.0

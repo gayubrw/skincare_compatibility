@@ -129,11 +129,13 @@ def calculate_compatibility(ing1, ing2):
     # Ambil confidence dengan aman
     if hasattr(model, "predict_proba"):
         probs = model.predict_proba(X_new)[0]
-        prob = probs[pred] if probs.size > 1 else 1.0
+        # Konversi pred ke int untuk indexing
+        pred_idx = int(pred)
+        prob = probs[pred_idx] if len(probs) > 1 else 1.0
     else:
         prob = 1.0
     
-    return pred, float(prob), shared
+    return int(pred), float(prob), shared
 
 def get_recommendations(product_name, df, model, top_n=5):
     """Dapatkan rekomendasi produk yang kompatibel dengan produk input (OPTIMIZED)."""
@@ -146,49 +148,65 @@ def get_recommendations(product_name, df, model, top_n=5):
     target_product = df[df["product_name"] == target_name].iloc[0]
     target_ingredients = target_product["parsed_ingredients"]
     
-    # OPTIMASI: Vectorize semua ingredients sekali saja
-    vectorizer = CountVectorizer()
-    
-    # Join ingredients untuk target product
-    target_text = " ".join(target_ingredients)
-    
-    # Prepare batch data untuk semua produk lain
+    # OPTIMASI: Batch feature calculation
     other_products = df[df["product_name"] != target_name].copy()
-    other_texts = other_products["parsed_ingredients"].apply(lambda x: " ".join(x))
     
-    # Vectorize target + all others dalam 1x operasi
-    all_texts = [target_text] + other_texts.tolist()
-    vectors = vectorizer.fit_transform(all_texts)
+    # Prepare batch features (len_diff, shared, jaccard, cosine_sim)
+    features_list = []
+    other_info = []
     
-    # Hitung cosine similarity untuk semua produk sekaligus
-    target_vector = vectors[0]
-    other_vectors = vectors[1:]
-    similarities = cosine_similarity(target_vector, other_vectors).flatten()
+    # Vectorizer untuk cosine similarity
+    target_text = " ".join(target_ingredients)
+    target_len = len(target_ingredients)
+    target_set = set(target_ingredients)
+    
+    for idx, row in other_products.iterrows():
+        other_ingredients = row["parsed_ingredients"]
+        other_text = " ".join(other_ingredients)
+        other_len = len(other_ingredients)
+        other_set = set(other_ingredients)
+        
+        # Calculate features (same as calculate_compatibility)
+        len_diff = abs(target_len - other_len)
+        shared = len(target_set & other_set)
+        union = target_set | other_set
+        jaccard = shared / len(union) if len(union) > 0 else 0
+        
+        # Cosine similarity - handle empty vocabulary
+        try:
+            if target_text.strip() and other_text.strip():
+                vec = CountVectorizer().fit([target_text, other_text])
+                tf1 = vec.transform([target_text])
+                tf2 = vec.transform([other_text])
+                cosine_sim = cosine_similarity(tf1, tf2)[0][0]
+            else:
+                cosine_sim = 0.0
+        except ValueError:
+            # Empty vocabulary - treat as no similarity
+            cosine_sim = 0.0
+        
+        features_list.append([len_diff, shared, jaccard, cosine_sim])
+        other_info.append({
+            "name": row["product_name"],
+            "shared_count": shared
+        })
     
     # BATCH PREDICTION: Predict semua sekaligus (jauh lebih cepat!)
-    # Gabungkan features untuk batch prediction
-    tf_features_1 = target_vector.toarray().repeat(len(other_products), axis=0)
-    tf_features_2 = other_vectors.toarray()
-    
-    # Gabungkan features
-    features_batch = np.hstack([tf_features_1, tf_features_2, similarities.reshape(-1, 1)])
-    
-    # Predict batch (1x prediction untuk semua produk!)
+    features_batch = np.array(features_list)
     predictions = model.predict(features_batch)
-    probabilities = model.predict_proba(features_batch)[:, 1]
+    probabilities = model.predict_proba(features_batch)
     
     # Filter hanya yang compatible dan buat list rekomendasi
     recommendations = []
-    for idx, (pred, prob) in enumerate(zip(predictions, probabilities)):
+    for idx, (pred, probs) in enumerate(zip(predictions, probabilities)):
         if pred == 1:  # Compatible
-            other_name = other_products.iloc[idx]["product_name"]
-            other_ingredients = other_products.iloc[idx]["parsed_ingredients"]
-            shared_count = len(set(target_ingredients) & set(other_ingredients))
+            pred_idx = int(pred)
+            prob = probs[pred_idx]
             
             recommendations.append({
-                "product_name": other_name,
+                "product_name": other_info[idx]["name"],
                 "confidence": round(float(prob), 2),
-                "shared_ingredients_count": shared_count
+                "shared_ingredients_count": other_info[idx]["shared_count"]
             })
     
     # Sort by confidence (descending)
